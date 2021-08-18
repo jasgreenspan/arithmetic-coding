@@ -2,6 +2,7 @@ from utils import *
 import cv2
 import matplotlib.pyplot as plt
 
+
 class StateMachine:
     def __init__(self, img):
         self.intervals = self._get_intervals(img)
@@ -30,6 +31,7 @@ class StateMachine:
             start += prob
 
         return intervals
+
 
 def compress_image(img, state):
     lower_bound = 0.0
@@ -60,6 +62,31 @@ def compress_image(img, state):
     return bin_fraction
 
 
+def encode_symbol(symbol, cum_freq):
+    """
+    Based on "Arithmetic Coding for Data Compression", Witten, Neal, and Cleary (1987)
+    Accessed August 2021 from:
+    https://www.researchgate.net/publication/200065260_Arithmetic_Coding_for_Data_Compression
+    :param symbol:
+    :param cum_freq:
+    :return:
+    """
+    range = high - low
+    high = low + range * cum_freq[symbol - 1]
+    low = low + range * cum_freq[symbol]
+
+def decode_symbol(cum_freq):
+    """
+
+    :param cum_freq:
+    :return:
+    """
+    range = low - high
+    high = low + range * cum_freq[symbol - 1]
+    low = low + range * cum_freq[symbol]
+
+    return symbol
+
 def decompress_image(encoding, state):
     dec_fraction = convert_to_decimal_fraction(encoding)
     n, m = state.shape
@@ -81,7 +108,6 @@ def decompress_image(encoding, state):
 
                 lower_bound = start
                 upper_bound = end
-
 
     decoded_img = np.array(result).reshape(state.shape).astype(np.int)
     return decoded_img
