@@ -1,1 +1,1 @@
-# Compression_Ex5
+# Image Compression with Arithmetic Coding
