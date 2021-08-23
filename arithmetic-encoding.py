@@ -2,7 +2,8 @@ from utils import *
 import cv2
 import matplotlib.pyplot as plt
 
-TERMINTAOR = "{0:b}".format(65535)
+TERMINATOR = "{0:b}".format(65535)
+# TODO: figure out proper value for terminator
 
 class StateMachine:
     def __init__(self, img):
@@ -23,6 +24,11 @@ class StateMachine:
 
     # Find value interval
     def _get_intervals(self, img):
+        """
+        Calculate initial intervals for arithmetic encoding
+        :param img:
+        :return: a dictionary where key: image value --> (probability, start of range, end of range)
+        """
         d = self._get_distribution(img)
         distribution = sorted(d.items(), key=lambda x: x[1], reverse=True)
         intervals = {}
@@ -52,13 +58,14 @@ def compress_image(img, state):
         while True:
             # When to left of lower bound, make LSB '1'
             bin_fraction += "1"
-            if convert_to_decimal_fraction(bin_fraction) > lower_bound:
+            # Check if binary fraction is in range, if so break
+            if upper_bound > convert_to_decimal_fraction(bin_fraction) >= lower_bound:
                 break
             # When to right of upper bound, make LSB '0'
             if convert_to_decimal_fraction(bin_fraction) > upper_bound:
                 bin_fraction = bin_fraction[:-1] + "0"
 
-        encoded_img += bin_fraction
+        encoded_img += bin_fraction + TERMINATOR
 
     return encoded_img
 
@@ -92,11 +99,12 @@ def decode_symbol(fraction, orig_low, orig_high, lower_bound, upper_bound):
 
 
 def decode_image(encoding, state):
+    # TODO: encode state
     n, m = state.shape
     num_of_blocks = (n * m) / BLOCK_SIZE ** 2
     # Decode each block separately using arithmetic coding
 
-    bin_fractions = encoding.split(TERMINTAOR)
+    bin_fractions = encoding.split(TERMINATOR)
     new_m, new_n = m // BLOCK_SIZE, n // BLOCK_SIZE
     assert len(bin_fractions) == num_of_blocks
 
