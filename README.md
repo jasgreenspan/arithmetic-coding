@@ -1,6 +1,6 @@
 # Image Compression with Arithmetic Coding
 References:  
-General Background
+General Background:
 - https://en.wikipedia.org/wiki/Arithmetic_coding
 - http://home.ustc.edu.cn/~xuedixiu/image.ustc/course/dip/DIP14-ch7.pdf
 - http://www.cs.ucf.edu/courses/cap5015/Arithmetic_coding_modified_2005.pdf
