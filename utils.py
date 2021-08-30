@@ -31,10 +31,9 @@ def deblock_img(blocked_img):
 
 def scaling(x):
     """
-    Scaling from [0, 255] to [−1/2, 1/2) and back.
+    Scaling from [0, 255] to [−128, 128) and back.
     :return:
     """
-    # normalized = x/255 - 1/2
     normalized = x.astype('int16') - 128
     return normalized
 

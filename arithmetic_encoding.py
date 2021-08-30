@@ -4,6 +4,7 @@ from fractions import Fraction
 import cv2
 import matplotlib.pyplot as plt
 
+BIT_LENGTH = 8
 GOLOMB_ENC_ORDER = 8
 PROB_GOLOMB_ORDER = 7
 BOUNDS_LEN_GOLOMB_ORDER = 9
@@ -22,11 +23,11 @@ class StateMachine:
             self.distribution, idx = self._decode_distribution(arg, idx)
         else: # Initialize StateMachine from image
             self.shape = arg.shape
-            self.distribution = self._get_rational_distribution(arg)
+            self.distribution = self._get_distribution_by_binary(arg)
 
         self.intervals = self._get_intervals(self.distribution)
 
-    def _get_rational_distribution(self, img):
+    def _get_distribution_by_value(self, img):
         """
         Get the distribution of values (either pixel or DCT) in the image
         :param img: the image
@@ -39,6 +40,23 @@ class StateMachine:
 
         # Return a dictionary of {value in image : probability of value appearing}
         distribution = dict(zip(prob[:, 0], prob[:, 1]))
+        return distribution
+
+    def _get_distribution_by_binary(self, img):
+        """
+        Get the distribution of 0's and 1's in the binary representing of the image
+        :param img: the image
+        :return: dictionary of values and probabilities
+        """
+        # Convert each element of the image to its binary representation
+        img_in_binary = np.vectorize(np.binary_repr)(img, width=BIT_LENGTH).flatten()
+        img_as_binary_str = ''.join(img_in_binary.tolist())
+
+        # Calculate the probabilities by counting how many times each value appears and dividing by total
+        distribution = {}
+        distribution["0"] = img_as_binary_str.count("0") / len(img_as_binary_str)
+        distribution["1"] = img_as_binary_str.count("1") / len(img_as_binary_str)
+
         return distribution
 
     def _get_intervals(self, distribution):
@@ -160,30 +178,33 @@ def compress_image(img, state):
 
         # Find sub-interval to encode block
         for val in np.nditer(block):
-            upper_bound, lower_bound = encode_symbol(val, state, lower_bound, upper_bound)
+            val_in_binary = np.binary_repr(val, width=BIT_LENGTH)
+            for bit in val_in_binary:
+                upper_bound, lower_bound = encode_symbol(bit, state, lower_bound, upper_bound)
+            # upper_bound, lower_bound = encode_symbol(val, state, lower_bound, upper_bound)
 
-        # Convert sub-interval to binary encoding
-        midway_point = (lower_bound + (upper_bound - lower_bound) / 2)
-        encoded_numerator = bin(midway_point.numerator)[2:]
-        encoded_denominator = bin(midway_point.denominator)[2:]
-        encoded_block = encode_exp_golomb(len(encoded_numerator), BOUNDS_LEN_GOLOMB_ORDER) \
-                        + encode_exp_golomb(len(encoded_denominator), BOUNDS_LEN_GOLOMB_ORDER) \
-                        + encoded_numerator + encoded_denominator
+    # Convert sub-interval to binary encoding
+    midway_point = (lower_bound + (upper_bound - lower_bound) / 2)
+    encoded_numerator = bin(midway_point.numerator)[2:]
+    encoded_denominator = bin(midway_point.denominator)[2:]
+    encoded_block = encode_exp_golomb(len(encoded_numerator), BOUNDS_LEN_GOLOMB_ORDER) \
+                    + encode_exp_golomb(len(encoded_denominator), BOUNDS_LEN_GOLOMB_ORDER) \
+                    + encoded_numerator + encoded_denominator
 
-        # encoded_block = "0.1"
-        # while True:
-        #     code_as_fraction = Fraction(str(convert_to_decimal_fraction(encoded_block)))
-        #     # When to left of lower bound, make LSB '1'
-        #     if code_as_fraction < lower_bound:
-        #         encoded_block += "1"
-        #     # Check if binary fraction is in range, if so break
-        #     if upper_bound > code_as_fraction >= lower_bound:
-        #         break
-        #     # When to right of upper bound, make LSB '0'
-        #     if code_as_fraction > upper_bound:
-        #         encoded_block = encoded_block[:-1] + "0"
+    # encoded_block = "0.1"
+    # while True:
+    #     code_as_fraction = Fraction(str(convert_to_decimal_fraction(encoded_block)))
+    #     # When to left of lower bound, make LSB '1'
+    #     if code_as_fraction < lower_bound:
+    #         encoded_block += "1"
+    #     # Check if binary fraction is in range, if so break
+    #     if upper_bound > code_as_fraction >= lower_bound:
+    #         break
+    #     # When to right of upper bound, make LSB '0'
+    #     if code_as_fraction > upper_bound:
+    #         encoded_block = encoded_block[:-1] + "0"
 
-        encoded_img += encoded_block
+    encoded_img += encoded_block
 
     # Encode the state
     encoded_state = state.encode_state()
@@ -201,7 +222,7 @@ def encode_symbol(symbol, state, lower_bound, upper_bound):
     :param upper_bound: the current upper bound of the range
     :return:
     """
-    orig_low, orig_high = state.intervals[symbol.item()]
+    orig_low, orig_high = state.intervals[symbol]
     range = upper_bound - lower_bound
     high = lower_bound + range * orig_high
     low = lower_bound + range * orig_low
@@ -234,6 +255,8 @@ def decompress_image(encoding):
     :param encoding: a binary string representing the encoded image
     :return: the decompressed image
     """
+    # TODO account for binary probability scheme
+    # TODO add binary probablity as parameter
     # First decode state
     idx = 0
     state_encoding_len, idx = decode_binary_string(encoding, idx, FRACTION_ENC_LENGTH)
@@ -281,7 +304,7 @@ def decompress_image(encoding):
 
 
 if __name__ == '__main__':
-    a = cv2.imread('Mona-Lisa.bmp', cv2.IMREAD_GRAYSCALE)[:256, :256]
+    a = cv2.imread('Mona-Lisa.bmp', cv2.IMREAD_GRAYSCALE)[:32, :32]
     # a = cv2.imread('Mona-Lisa.bmp', cv2.IMREAD_GRAYSCALE)
     state = StateMachine(a)
     code = compress_image(a, state)
