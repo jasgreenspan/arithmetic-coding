@@ -183,7 +183,11 @@ def compress_image(img, state):
 
         encoded_img += encoded_block
 
-    return encoded_img
+    # Encode the state
+    encoded_state = state.encode_state()
+    full_encoding = format(len(encoded_state), FRACTION_ENC) + encoded_state + encoded_img
+
+    return full_encoding
 
 
 def encode_symbol(symbol, state, lower_bound, upper_bound):
@@ -219,7 +223,7 @@ def decode_symbol(orig_low, orig_high, lower_bound, upper_bound):
     return high, low
 
 
-def decompress_image(encoding, state):
+def decompress_image(encoding):
     """
     Given an image encoded using arithmetic coding and encoded frequency table, recreate the image
     Based on "Arithmetic Coding for Data Compression", Witten, Neal, and Cleary (1987)
@@ -228,12 +232,18 @@ def decompress_image(encoding, state):
     :param encoding: a binary string representing the encoded image
     :return: the decompressed image
     """
-    # TODO: encode state
+    # First decode state
+    idx = 0
+    state_encoding_len, idx = decode_binary_string(encoding, idx, FRACTION_ENC_LENGTH)
+    encoded_state = encoding[idx: idx + state_encoding_len]
+    idx += state_encoding_len
+    state = StateMachine(encoded_state)
+
+    # Then decode image using the state
     m, n = state.shape
     new_m, new_n = m // BLOCK_SIZE, n // BLOCK_SIZE
     num_of_blocks = new_m * new_n
     decoded_img = np.empty((num_of_blocks, BLOCK_SIZE, BLOCK_SIZE))
-    idx = 0
 
     # Decode each block separately using arithmetic coding
     for i in range(num_of_blocks):
