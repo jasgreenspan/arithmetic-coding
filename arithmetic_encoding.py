@@ -3,9 +3,10 @@ from golomb_encoding import encode_exp_golomb, decode_exp_golomb
 from fractions import Fraction
 import cv2
 import matplotlib.pyplot as plt
-import math
 
-GOLOMB_ENC_ORDER = 3
+GOLOMB_ENC_ORDER = 8
+PROB_GOLOMB_ORDER = 7
+BOUNDS_LEN_GOLOMB_ORDER = 9
 SHAPE_ENC_LENGTH = 16
 SHAPE_ENC = "0%db" % SHAPE_ENC_LENGTH
 VALS_ENC_LENGTH = 8
@@ -87,8 +88,8 @@ class StateMachine:
         for val, prob in self.distribution.items():
             prob = Fraction(prob)
             enc_val = encode_exp_golomb(int(val), GOLOMB_ENC_ORDER)
-            enc_prob_numerator = encode_exp_golomb(prob.numerator, GOLOMB_ENC_ORDER)
-            enc_prob_denominator = encode_exp_golomb(prob.denominator, GOLOMB_ENC_ORDER)
+            enc_prob_numerator = encode_exp_golomb(prob.numerator, PROB_GOLOMB_ORDER)
+            enc_prob_denominator = encode_exp_golomb(prob.denominator, PROB_GOLOMB_ORDER)
 
             encoding += enc_val + enc_prob_numerator + enc_prob_denominator
 
@@ -114,8 +115,8 @@ class StateMachine:
         distribution = {}
         while idx < len(encoding):
             val, idx = decode_exp_golomb(encoding, GOLOMB_ENC_ORDER, idx)
-            prob_numerator, idx = decode_exp_golomb(encoding, GOLOMB_ENC_ORDER, idx)
-            prob_denominator, idx = decode_exp_golomb(encoding, GOLOMB_ENC_ORDER, idx)
+            prob_numerator, idx = decode_exp_golomb(encoding, PROB_GOLOMB_ORDER, idx)
+            prob_denominator, idx = decode_exp_golomb(encoding, PROB_GOLOMB_ORDER, idx)
 
             distribution[val] = Fraction(prob_numerator, prob_denominator)
 
@@ -165,7 +166,8 @@ def compress_image(img, state):
         midway_point = (lower_bound + (upper_bound - lower_bound) / 2)
         encoded_numerator = bin(midway_point.numerator)[2:]
         encoded_denominator = bin(midway_point.denominator)[2:]
-        encoded_block = format(len(encoded_numerator), FRACTION_ENC) + format(len(encoded_denominator), FRACTION_ENC) \
+        encoded_block = encode_exp_golomb(len(encoded_numerator), BOUNDS_LEN_GOLOMB_ORDER) \
+                        + encode_exp_golomb(len(encoded_denominator), BOUNDS_LEN_GOLOMB_ORDER) \
                         + encoded_numerator + encoded_denominator
 
         # encoded_block = "0.1"
@@ -249,8 +251,8 @@ def decompress_image(encoding):
     for i in range(num_of_blocks):
         print("Decoding %d 'th block" % i)
         # Decode the binary string representing the block
-        num_len, idx = decode_binary_string(encoding, idx, FRACTION_ENC_LENGTH)
-        den_len, idx = decode_binary_string(encoding, idx, FRACTION_ENC_LENGTH)
+        num_len, idx = decode_exp_golomb(encoding, BOUNDS_LEN_GOLOMB_ORDER, idx)
+        den_len, idx = decode_exp_golomb(encoding, BOUNDS_LEN_GOLOMB_ORDER, idx)
         decoded_numerator, idx = decode_binary_string(encoding, idx, num_len)
         decoded_denominator, idx = decode_binary_string(encoding, idx, den_len)
 
