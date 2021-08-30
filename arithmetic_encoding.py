@@ -260,16 +260,17 @@ def decompress_image(encoding):
         lower_bound = 0
         upper_bound = 1
 
-        # TODO: improve runtime
         while len(block_result) < BLOCK_SIZE ** 2:
             interval = upper_bound - lower_bound
-            for orig_val in state.intervals.keys():
-                # The next encoded symbol has the point in its range
-                orig_low, orig_high = state.intervals[orig_val]
-                # Check if symbol is encoded in inverse of orig. calc. low = lower_bound + range * orig_low
+            for orig_val, bounds in state.intervals.items():
+                orig_low, orig_high = bounds
+
+                # Find the symbol that would have been encoded in the current range
+                # Using the inverse of original calculation: low = lower_bound + range * orig_low
                 if orig_low <= (midway_point - lower_bound) / interval < orig_high:
                     block_result += [orig_val]
                     upper_bound, lower_bound = decode_symbol(orig_low, orig_high, lower_bound, upper_bound)
+                    break
 
         decoded_img[i] = np.asarray(block_result).reshape(BLOCK_SIZE, BLOCK_SIZE)
 
@@ -278,7 +279,7 @@ def decompress_image(encoding):
 
 
 if __name__ == '__main__':
-    a = cv2.imread('Mona-Lisa.bmp', cv2.IMREAD_GRAYSCALE)[:32, :32]
+    a = cv2.imread('Mona-Lisa.bmp', cv2.IMREAD_GRAYSCALE)[:256, :256]
     # a = cv2.imread('Mona-Lisa.bmp', cv2.IMREAD_GRAYSCALE)
     state = StateMachine(a)
     code = compress_image(a, state)
