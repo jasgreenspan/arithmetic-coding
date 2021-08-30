@@ -84,8 +84,9 @@ class StateMachine:
         """
         encoding = ""
 
-        for val, prob in self.distribution:
-            enc_val = encode_exp_golomb(val, GOLOMB_ENC_ORDER)
+        for val, prob in self.distribution.items():
+            prob = Fraction(prob)
+            enc_val = encode_exp_golomb(int(val), GOLOMB_ENC_ORDER)
             enc_prob_numerator = encode_exp_golomb(prob.numerator, GOLOMB_ENC_ORDER)
             enc_prob_denominator = encode_exp_golomb(prob.denominator, GOLOMB_ENC_ORDER)
 
@@ -111,15 +112,14 @@ class StateMachine:
         :return: dictionary of values and probabilities
         """
         distribution = {}
-        num_of_vals, idx = decode_binary_string(encoding, idx, VALS_ENC_LENGTH)
-        for i in range(num_of_vals):
+        while idx < len(encoding):
             val, idx = decode_exp_golomb(encoding, GOLOMB_ENC_ORDER, idx)
             prob_numerator, idx = decode_exp_golomb(encoding, GOLOMB_ENC_ORDER, idx)
             prob_denominator, idx = decode_exp_golomb(encoding, GOLOMB_ENC_ORDER, idx)
 
             distribution[val] = Fraction(prob_numerator, prob_denominator)
 
-        return distribution
+        return distribution, idx
 
 
 def decode_binary_string(binary_str, current_idx, encoding_length):
@@ -278,11 +278,11 @@ def decompress_image(encoding):
 
 
 if __name__ == '__main__':
-    a = cv2.imread('Mona-Lisa.bmp', cv2.IMREAD_GRAYSCALE)[:128, :128]
-    a = cv2.imread('Mona-Lisa.bmp', cv2.IMREAD_GRAYSCALE)
+    a = cv2.imread('Mona-Lisa.bmp', cv2.IMREAD_GRAYSCALE)[:32, :32]
+    # a = cv2.imread('Mona-Lisa.bmp', cv2.IMREAD_GRAYSCALE)
     state = StateMachine(a)
     code = compress_image(a, state)
-    decoded = decompress_image(code, state)
+    decoded = decompress_image(code)
 
     plt.imshow(a, cmap='gray')
     plt.show()
