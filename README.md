@@ -12,3 +12,4 @@ Basic implementation:
 Implementation details:
 - https://marknelson.us/posts/2014/10/19/data-compression-with-arithmetic-coding.html
 - https://philipstel.wordpress.com/2010/12/21/arithmetic-coding-algorithm-and-implementation-issues-2/
+- http://michael.dipperstein.com/arithmetic/index.html
