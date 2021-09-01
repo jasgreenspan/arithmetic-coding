@@ -1,3 +1,4 @@
+from cfractions import Fraction
 from functools import reduce
 from math import sqrt
 
@@ -140,11 +141,10 @@ def convert_to_decimal_fraction(bin_fraction):
     :param bin_fraction: the binary fraction
     :return: the decimal fraction
     """
-    frac = bin_fraction.split(".")[1]
 
-    dec_fraction = 0.0
-    for i in range(len(frac)):
-        dec_fraction += (int(frac[i]) / 2 ** (i + 1))
+    dec_fraction = 0
+    for i in range(len(bin_fraction)):
+        dec_fraction += Fraction(int(bin_fraction[i]), 2 ** (i + 1))
 
     return dec_fraction
 
