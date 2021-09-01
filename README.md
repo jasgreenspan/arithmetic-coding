@@ -1,6 +1,7 @@
 # Image Compression with Arithmetic Coding
 ## General Approach
-To use arithmetic coding to encode an image. We built a state model of the pixel/quantized DCT values. Then, each 8x8 block in the image in encoded as a fractional value between \[0,1), representing the values in the block. Encoding using the pixel values creates a lossless compression, and using the quanitized DCT values creates a lossy one. Theoretically, the entire image could be encoded into a single fractional value, however, that creates a serious burden on the runtime.
+**Goal**: to use arithmetic coding to encode an image.  
+**Method**: We built a state model of the pixel/quantized DCT values. Then, each 8x8 block in the image in encoded as a fractional value between \[0,1), representing the values in the block. Encoding using the pixel values creates a lossless compression, and using the quanitized DCT values creates a lossy one. Theoretically, the entire image could be encoded into a single fractional value, however, that creates a serious burden on the runtime.
 
 ## Implementation details
 Storing rational numbers with the precision needed to encode the entire block is not possible with the limitations of a floating point. Instead, we calculated the upper and lower bounds of the encoded sequence using a fraction represented as a numerator and denominator. To find the shortest bit sequence that encodes a number between this point, we iteratively created a binary rational number, which essentially can be stored as just the numerator (since the denominator is a standard conversion).
