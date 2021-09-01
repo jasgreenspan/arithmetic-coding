@@ -1,3 +1,6 @@
+from functools import reduce
+from math import sqrt
+
 import numpy as np
 from scipy.fftpack import dct, idct
 import matplotlib.pyplot as plt
@@ -171,6 +174,17 @@ def psnr(img1, img2):
     ratio = 10 * np.log10((max_pixel ** 2) / error)
     return ratio
 
+def factors(n):
+    """
+    From stackoverflow user Steinar Lima
+    Accessed August 2021:
+    https://stackoverflow.com/questions/6800193/what-is-the-most-efficient-way-of-finding-all-the-factors-of-a-number-in-python
+    :param n:
+    :return:
+    """
+    step = 2 if n % 2 else 1
+    return set(reduce(list.__add__,
+                      ([i, n // i] for i in range(1, int(sqrt(n)) + 1, step) if n % i == 0)))
 
 ############################################################
 # Graph Utils

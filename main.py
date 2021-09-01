@@ -101,8 +101,8 @@ def dequantize_img(quantized_img, b):
 
 if __name__ == '__main__':
     quantization_param = 50
-    a = cv2.imread('Mona-Lisa.bmp', cv2.IMREAD_GRAYSCALE)[:32, :32]
-    # a = quantize_img(a, quantization_param)
+    a = cv2.imread('Mona-Lisa.bmp', cv2.IMREAD_GRAYSCALE)[:64, :64]
+    a = quantize_img(a, quantization_param)
 
     # Calculate length of encoding image with Exp-Golomb Encoding
     golomb_encoding_len_by_pixel = np.vectorize(exp_golomb_length)(a, GOLOMB_ENC_ORDER)
