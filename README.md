@@ -4,11 +4,14 @@
 **Method**: We built a state model of the pixel/quantized DCT values. Then, each 8x8 block in the image in encoded as a fractional value between \[0,1), representing the values in the block. Encoding using the pixel values creates a lossless compression, and using the quanitized DCT values creates a lossy one. Theoretically, the entire image could be encoded into a single fractional value, however, that creates a serious burden on the runtime.
 
 ## Implementation details
-Storing rational numbers with the precision needed to encode the entire block is not possible with the limitations of a floating point. Instead, we calculated the upper and lower bounds of the encoded sequence using a fraction represented as a numerator and denominator. To find the shortest bit sequence that encodes a number between this point, we iteratively created a binary rational number, which essentially can be stored as just the numerator (since the denominator is a standard conversion).
+### Creating the state model and the probablities
+We chose to implement the model in two ways: (1) where the probablity distribution is over the values of the image and (2) where the probability distribution is over the binary representation of each value, i.e. the frequency of 0's and 1's. While using the binary representation distribution produced a slighty better result in description length, it had more overhead in runtime.
+### Data type for the lower and upper bounds
+Storing rational numbers with the precision needed to encode the entire block is not possible with the limitations of a floating point. Instead, we calculated the upper and lower bounds of the encoded sequence using a fraction represented as a numerator and denominator. To find the shortest bit sequence that encodes a number between this point, we iteratively created a binary rational number, which essentially can be stored as just the numerator (since the denominator is a standard conversion using powers of two for each digit).
 
 ## Results
-For the lossless method, we compared the results to encoding each pixel value using exp-golomb of order 8 (this order produced the best results with exp-golomb on the test image).
-For the lossy method, we compared the results to the run encoding DCT method.
+For the lossless method, we compared the the description length results to those of encoding each pixel value using exp-golomb of order 8 (this order produced the best results with exp-golomb on the test image).
+For the lossy method, we compared the results to the run-encoding DCT method, similar to that used in JPEG.
 
 ## References:  
 General Background:
