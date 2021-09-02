@@ -27,14 +27,29 @@ class StateMachine:
         else: # Initialize StateMachine from image
             img = args[0]
             self.shape = img.shape
-            if args[1]: # with_binary
+            if len(args) > 1: # with_binary
                 self.with_binary = True
                 self.distribution = self._get_distribution_by_binary(img)
             else:
                 self.with_binary = False
-                self.distribution = self._get_distribution_by_value(img)
+                self.distribution = self._get_non_zero_distribution_by_value(img)
 
         self.intervals = self._get_intervals(self.distribution)
+
+    def _get_non_zero_distribution_by_value(self, img):
+        """
+        Get the distribution of values (either pixel or DCT) in the image
+        :param img: the image
+        :return: dictionary of values and probabilities
+        """
+        # Calculate the probabilities by counting how many times each value appears and dividing by total
+        values, counts = np.unique(img, return_counts=True)
+        prob = np.array([values, counts], dtype=np.float).T
+        prob[:, 1] /= img.size
+
+        # Return a dictionary of {value in image : probability of value appearing}
+        distribution = dict(zip(prob[:, 0], prob[:, 1]))
+        return distribution
 
     def _get_distribution_by_value(self, img):
         """
@@ -81,7 +96,7 @@ class StateMachine:
         # Divide up the interval [0,1) to sub-intervals representing each value, from largest to smallest
         for val, prob in d:
             upper = lower + prob
-            intervals[val] = (Fraction(str(lower)), Fraction(str(upper)))
+            intervals[val] = (Fraction(str(lower)).limit_denominator(), Fraction(str(upper)).limit_denominator())
             lower += prob
 
         return intervals
@@ -121,7 +136,7 @@ class StateMachine:
         encoding = ""
 
         for val, prob in self.distribution.items():
-            prob = Fraction(prob)
+            prob = Fraction(prob).limit_denominator()
             enc_val = encode_exp_golomb(int(val), GOLOMB_ENC_ORDER)
             enc_prob_numerator = encode_exp_golomb(prob.numerator, PROB_GOLOMB_ORDER)
             enc_prob_denominator = encode_exp_golomb(prob.denominator, PROB_GOLOMB_ORDER)
@@ -178,6 +193,43 @@ def decode_binary_string(binary_str, current_idx, encoding_length):
     return val, new_idx
 
 
+def compress_numbers_lst(numbers_lst, state):
+    lower_bound = 0
+    upper_bound = 1
+    encoded_lst = ""
+
+    for val in numbers_lst:
+        if state.with_binary:
+            val_in_binary = np.binary_repr(val, width=BIT_LENGTH)
+            for bit in val_in_binary:
+                upper_bound, lower_bound = encode_symbol(bit, state, lower_bound, upper_bound)
+        else:
+            upper_bound, lower_bound = encode_symbol(val, state, lower_bound, upper_bound)
+
+    current_bit = 0
+    while True:
+        # When to left of lower bound, make LSB '1'
+        encoded_lst += "1"
+        # code_as_fraction = Fraction(int(encoded_block, 2), 2 ** current_bit)
+        code_as_fraction = convert_to_decimal_fraction(encoded_lst)
+        # Check if binary fraction is in range, if so break
+        if upper_bound > code_as_fraction >= lower_bound:
+            break
+        # When to right of upper bound, make LSB '0'
+        if code_as_fraction >= upper_bound:
+            encoded_lst = encoded_lst[:-1] + "0"
+
+        current_bit += 1
+
+    encoded_lst = encode_exp_golomb(len(encoded_lst), BOUNDS_LEN_GOLOMB_ORDER) + encoded_lst
+    return encoded_lst
+    # Encode the state
+    # encoded_state = state.encode_state()
+    # full_encoding = format(len(encoded_state), FRACTION_ENC) + encoded_state + encoded_lst
+    #
+    # return full_encoding
+
+
 def compress_image(img, state):
     """
     Given an image and a frequency table, encode the image using arithmetic coding
@@ -220,7 +272,7 @@ def compress_image(img, state):
             if upper_bound > code_as_fraction >= lower_bound:
                 break
             # When to right of upper bound, make LSB '0'
-            if code_as_fraction > upper_bound:
+            if code_as_fraction >= upper_bound:
                 encoded_block = encoded_block[:-1] + "0"
 
             current_bit += 1
