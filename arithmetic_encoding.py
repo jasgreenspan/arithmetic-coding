@@ -6,8 +6,8 @@ import matplotlib.pyplot as plt
 from mpmath import findroot
 
 BIT_LENGTH = 8
-GOLOMB_ENC_ORDER = 8
-PROB_GOLOMB_ORDER = 7
+GOLOMB_ENC_ORDER = 2
+PROB_GOLOMB_ORDER = 2
 BOUNDS_LEN_GOLOMB_ORDER = 9
 SHAPE_ENC_LENGTH = 16
 SHAPE_ENC = "0%db" % SHAPE_ENC_LENGTH
@@ -22,30 +22,31 @@ class StateMachine:
             encoding = args[0]
             idx = 0
             self.with_binary, idx = self._decode_with_binary(encoding, idx)
-            self.shape, idx = self._decode_shape(encoding, idx)
             self.distribution, idx = self._decode_distribution(encoding, idx)
         else: # Initialize StateMachine from image
             img = args[0]
-            self.shape = img.shape
             if len(args) > 1: # with_binary
                 self.with_binary = True
                 self.distribution = self._get_distribution_by_binary(img)
             else:
                 self.with_binary = False
-                self.distribution = self._get_non_zero_distribution_by_value(img)
+                self.distribution = self._get_distribution_for_coefficients(img)
 
         self.intervals = self._get_intervals(self.distribution)
 
-    def _get_non_zero_distribution_by_value(self, img):
+
+    def _get_distribution_for_coefficients(self, coefficients):
         """
-        Get the distribution of values (either pixel or DCT) in the image
-        :param img: the image
+        Get the distribution of values in DC coefficients
+        :param coefficients: the coefficients
         :return: dictionary of values and probabilities
         """
         # Calculate the probabilities by counting how many times each value appears and dividing by total
-        values, counts = np.unique(img, return_counts=True)
+        # First, remove the extra zero values
+        coefficients = np.concatenate((coefficients[:, :, :1].flatten(), coefficients[np.nonzero(coefficients[:, :, 1:])]))
+        values, counts = np.unique(coefficients, return_counts=True)
         prob = np.array([values, counts], dtype=np.float).T
-        prob[:, 1] /= img.size
+        prob[:, 1] /= coefficients.size
 
         # Return a dictionary of {value in image : probability of value appearing}
         distribution = dict(zip(prob[:, 0], prob[:, 1]))
@@ -107,27 +108,15 @@ class StateMachine:
         :return: the encoded string
         """
         encoded_with_binary = self._encode_with_binary()
-        encoded_shape = self._encode_shape()
         encoded_distribution = self._encode_distribution()
 
-        return encoded_with_binary + encoded_shape + encoded_distribution
+        return encoded_with_binary + encoded_distribution
 
     def _encode_with_binary(self):
         """
         Encode the with binary parameter
         """
         return "1" if self.with_binary is True else "0"
-
-
-    def _encode_shape(self):
-        """
-        Encode the shape
-        """
-        m, n = self.shape
-        enc_m = format(m, SHAPE_ENC)
-        enc_n = format(n, SHAPE_ENC)
-
-        return enc_m + enc_n
 
     def _encode_distribution(self):
         """
@@ -144,16 +133,6 @@ class StateMachine:
             encoding += enc_val + enc_prob_numerator + enc_prob_denominator
 
         return encoding
-
-    def _decode_shape(self, encoding, idx):
-        """
-        Recreate the image shape from an encoding
-        """
-        m, idx = decode_binary_string(encoding, idx, SHAPE_ENC_LENGTH)
-        n, idx = decode_binary_string(encoding, idx, SHAPE_ENC_LENGTH)
-
-        shape = (m, n)
-        return shape, idx
 
     def _decode_distribution(self, encoding, idx):
         """
@@ -194,6 +173,16 @@ def decode_binary_string(binary_str, current_idx, encoding_length):
 
 
 def compress_numbers_lst(numbers_lst, state):
+    """
+    Encode a list of numbers using arithmetic coding. Can be used to encode a block of values in an image or
+    for a separate sequence, such as of nonzero DC coefficients.
+    Based on "Arithmetic Coding for Data Compression", Witten, Neal, and Cleary (1987)
+    Accessed August 2021 from:
+    https://www.researchgate.net/publication/200065260_Arithmetic_Coding_for_Data_Compression
+    :param numbers_lst: the sequence
+    :param state: the state represtnign the probablities
+    :return: the encoded sequence
+    """
     lower_bound = 0
     upper_bound = 1
     encoded_lst = ""
@@ -223,19 +212,11 @@ def compress_numbers_lst(numbers_lst, state):
 
     encoded_lst = encode_exp_golomb(len(encoded_lst), BOUNDS_LEN_GOLOMB_ORDER) + encoded_lst
     return encoded_lst
-    # Encode the state
-    # encoded_state = state.encode_state()
-    # full_encoding = format(len(encoded_state), FRACTION_ENC) + encoded_state + encoded_lst
-    #
-    # return full_encoding
 
 
 def compress_image(img, state):
     """
     Given an image and a frequency table, encode the image using arithmetic coding
-    Based on "Arithmetic Coding for Data Compression", Witten, Neal, and Cleary (1987)
-    Accessed August 2021 from:
-    https://www.researchgate.net/publication/200065260_Arithmetic_Coding_for_Data_Compression
     :param img: the image to be encoded (either in pixel or DCT values)
     :param state: the state representing the frequency of the values to be encoded
     :return: a binary string representing the encoded image
@@ -250,34 +231,7 @@ def compress_image(img, state):
         counter += 1
 
         # Find sub-interval to encode block
-        lower_bound = 0
-        upper_bound = 1
-
-        for val in np.nditer(block):
-            if state.with_binary:
-                val_in_binary = np.binary_repr(val, width=BIT_LENGTH)
-                for bit in val_in_binary:
-                    upper_bound, lower_bound = encode_symbol(bit, state, lower_bound, upper_bound)
-            else:
-                upper_bound, lower_bound = encode_symbol(val, state, lower_bound, upper_bound)
-
-        encoded_block = ""
-        current_bit = 0
-        while True:
-            # When to left of lower bound, make LSB '1'
-            encoded_block += "1"
-            # code_as_fraction = Fraction(int(encoded_block, 2), 2 ** current_bit)
-            code_as_fraction = convert_to_decimal_fraction(encoded_block)
-            # Check if binary fraction is in range, if so break
-            if upper_bound > code_as_fraction >= lower_bound:
-                break
-            # When to right of upper bound, make LSB '0'
-            if code_as_fraction >= upper_bound:
-                encoded_block = encoded_block[:-1] + "0"
-
-            current_bit += 1
-
-        encoded_img += encode_exp_golomb(len(encoded_block), BOUNDS_LEN_GOLOMB_ORDER) + encoded_block
+        encoded_img += compress_numbers_lst(block.tolist(), state)
 
     # Encode the state
     encoded_state = state.encode_state()
@@ -322,13 +276,50 @@ def decode_symbol(orig_low, orig_high, lower_bound, upper_bound):
 
     return high, low
 
+def decompress_numbers_lst(encoding, state, list_length, idx):
+    """
+    Given a sequence encoded using arithmetic coding, recreate the sequence
+    Based on "Arithmetic Coding for Data Compression", Witten, Neal, and Cleary (1987)
+    Accessed August 2021 from:
+    https://www.researchgate.net/publication/200065260_Arithmetic_Coding_for_Data_Compression
+    :param encoding: a binary string representing the encoded sequence
+    :return: the decompressed sequence
+    """
+    num_len, idx = decode_exp_golomb(encoding, BOUNDS_LEN_GOLOMB_ORDER, idx)
+    decoded_numerator = encoding[idx: idx + num_len]
+    idx += num_len
+    midway_point = convert_to_decimal_fraction(decoded_numerator)
+
+    # Reverse the arithmetic coding by going over all the ranges
+    result = []
+    lower_bound = 0
+    upper_bound = 1
+
+    decoded_number = ""
+    while len(result) < list_length:
+        interval = upper_bound - lower_bound
+        for orig_val, bounds in state.intervals.items():
+            orig_low, orig_high = bounds
+
+            # Find the symbol that would have been encoded in the current range
+            # Using the inverse of original calculation: low = lower_bound + range * orig_low
+            if orig_low <= (midway_point - lower_bound) / interval < orig_high:
+                if state.with_binary:
+                    decoded_number += str(orig_val)
+                    if len(decoded_number) % BIT_LENGTH == 0:
+                        result += [int(decoded_number, 2)]
+                        decoded_number = ""
+                else:
+                    result += [orig_val]
+                upper_bound, lower_bound = decode_symbol(orig_low, orig_high, lower_bound, upper_bound)
+                break
+
+    return result, idx
+
 
 def decompress_image(encoding):
     """
     Given an image encoded using arithmetic coding and encoded frequency table, recreate the image
-    Based on "Arithmetic Coding for Data Compression", Witten, Neal, and Cleary (1987)
-    Accessed August 2021 from:
-    https://www.researchgate.net/publication/200065260_Arithmetic_Coding_for_Data_Compression
     :param encoding: a binary string representing the encoded image
     :return: the decompressed image
     """
@@ -349,36 +340,7 @@ def decompress_image(encoding):
     for i in range(num_of_blocks):
         print("Decoding %d 'th block" % i)
         # Decode the binary string representing the block
-        num_len, idx = decode_exp_golomb(encoding, BOUNDS_LEN_GOLOMB_ORDER, idx)
-        decoded_numerator = encoding[idx: idx + num_len]
-        idx += num_len
-        midway_point = convert_to_decimal_fraction(decoded_numerator)
-
-        # Reverse the arithmetic coding by going over all the ranges
-        block_result = []
-        lower_bound = 0
-        upper_bound = 1
-
-        decoded_number = ""
-        while len(block_result) < BLOCK_SIZE ** 2:
-            interval = upper_bound - lower_bound
-            for orig_val, bounds in state.intervals.items():
-                orig_low, orig_high = bounds
-
-                # Find the symbol that would have been encoded in the current range
-                # Using the inverse of original calculation: low = lower_bound + range * orig_low
-
-                if orig_low <= (midway_point - lower_bound) / interval < orig_high:
-                    if state.with_binary:
-                        decoded_number += str(orig_val)
-                        if len(decoded_number) % BIT_LENGTH == 0:
-                            block_result += [int(decoded_number, 2)]
-                            decoded_number = ""
-                    else:
-                        block_result += [orig_val]
-                    upper_bound, lower_bound = decode_symbol(orig_low, orig_high, lower_bound, upper_bound)
-                    break
-
+        block_result, idx = decompress_numbers_lst(encoding, state, BLOCK_SIZE ** 2, idx)
         decoded_img[i] = np.asarray(block_result).reshape(BLOCK_SIZE, BLOCK_SIZE)
 
     decoded_img = deblock_img(decoded_img.reshape((new_m, new_n, BLOCK_SIZE, BLOCK_SIZE)))

@@ -68,17 +68,20 @@ def quantize_img(img, b):
     """
     scaled_img = scaling(img) # Scaling to reals centered at 0
     blocked_img = block_img(scaled_img)
-
     row_size, col_size, dim, dim = blocked_img.shape
+    int_lists = np.zeros((row_size, col_size, 64))
     for row in range(row_size):
         for col in range(col_size):
             block = blocked_img[row, col]
             coeff_mat = dct2(block)
             quantized_block = quantize_block(coeff_mat, b)
+
+            int_list, _ = make_intlist_and_runlist(zigzag(quantized_block))
+
+            int_lists[row, col, :len(int_list)] = int_list
             blocked_img[row, col] = quantized_block
 
-    # quantized_img = deblock_img(blocked_img)
-    return blocked_img
+    return blocked_img, int_lists
 
 
 def dequantize_img(quantized_img, b):
@@ -103,7 +106,7 @@ def dequantize_img(quantized_img, b):
     return dequantized_image
 
 
-def coeff_vec_to_eq_vec(zigzags, k1, k2, prev_first_coeff):
+def coeff_vec_to_eq_vec(zigzags, k1, k2, k3, prev_first_coeff, with_arithmetic=False):
     """
     Encode the coefficient vector as follows:
         1. Number of runs to follow: Golomb-Rice of order k1
@@ -125,20 +128,19 @@ def coeff_vec_to_eq_vec(zigzags, k1, k2, prev_first_coeff):
     num_of_bits = np.ceil(np.log2(POSSIBLE_VALS)).astype('int')
     encoded_first_coefficient = sgn_bit + format(abs(first_coeff), "0" + str(num_of_bits) + "b")
 
-    state = StateMachine(np.asarray(int_list).reshape(-1, 1))
-    enc_int_list_golomb = ''.join([encoded_first_coefficient] + [encode_exp_golomb(x, order=0) for x in int_list[1:]])
-    enc_int_list_arithmetic = compress_numbers_lst(int_list, state)
-    if len(enc_int_list_arithmetic) < len(enc_int_list_golomb):
-        print("Go arithmetic")
-        enc_int_list = enc_int_list_arithmetic
-    else:
-        enc_int_list = enc_int_list_golomb
+    enc_int_list_golomb = ''.join([encoded_first_coefficient] + [encode_exp_golomb(x, k3) for x in int_list[1:]])
+    enc_int_list = enc_int_list_golomb
+    if with_arithmetic:
+        enc_int_list_arithmetic = compress_numbers_lst(int_list, state)
+        if len(enc_int_list_arithmetic) < len(enc_int_list_golomb):
+            print("Arithmetic code saved %d bits" % (len(enc_int_list_golomb) - len(enc_int_list_arithmetic)))
+            enc_int_list = enc_int_list_arithmetic
 
     eq_vec = ''.join(enc_num_of_runs + enc_run_list) + enc_int_list
     return eq_vec, prev_first_coeff
 
 
-def eq_vec_to_coeff_vec(eq_vec, start_idx, k1, k2, k3, n, prev_first_int):
+def eq_vec_to_coeff_vec(eq_vec, start_idx, k1, k2, k3, prev_first_int, with_arithmetic=False):
     """
     Converts equivalent vector back to coefficient vector
     :return:
@@ -153,19 +155,28 @@ def eq_vec_to_coeff_vec(eq_vec, start_idx, k1, k2, k3, n, prev_first_int):
         run_list.append(run)
 
     # decodes the int_list
-    sign = -1 if eq_vec[idx] == '0' else 1
-    idx += 1
+    temp_idx = idx
+    sign = -1 if eq_vec[temp_idx] == '0' else 1
+    temp_idx += 1
     num_of_bits = np.ceil(np.log2(POSSIBLE_VALS)).astype('int')
-    first_int = int(eq_vec[idx : idx + num_of_bits], 2) * sign
-    idx += num_of_bits
+    first_int, temp_idx = decode_binary_string(eq_vec, temp_idx, num_of_bits) * sign
 
     int_list = [first_int]
 
     for i in range(run_len):
-        num, idx = decode_exp_golomb(eq_vec, k3, idx)
+        num, temp_idx = decode_exp_golomb(eq_vec, k3, temp_idx)
         int_list.append(num)
 
-    coeff_vec = recreate_coeff_vec(run_list, int_list, n)
+    if with_arithmetic:
+        int_list_length = run_len + 1
+        idx_before_lst = idx
+        temp_int_list, idx = decompress_numbers_lst(eq_vec, state, int_list_length, idx)
+        if idx_before_lst - idx < temp_idx - idx_before_lst: # Arithmetic coding was used
+            int_list = temp_int_list
+        else:
+            idx = temp_idx
+
+    coeff_vec = recreate_coeff_vec(run_list, int_list, BLOCK_SIZE)
     return coeff_vec, idx, prev_first_int
 
 
@@ -206,24 +217,30 @@ def make_intlist_and_runlist(zigzags):
     return int_list, run_list
 
 
-def vec_to_image(vec, k1, k2, k3, n, b):
+def code_to_image(encoding, k1, k2, k3, b, with_arithmetic=False):
     """
     Convert coefficient vector to img
-    :param vec:
+    :param encoding:
     :return: img
     """
-    orig_m, orig_n = int(vec[:16],2),   int(vec[16:32],2)
     prev_first_int = 0
-    new_m = orig_m // n
-    new_n = orig_n // n
-    binned_matrix = np.empty((new_m, new_n, n, n))
+    new_m = orig_m // BLOCK_SIZE
+    new_n = orig_n // BLOCK_SIZE
+    binned_matrix = np.empty((new_m, new_n, BLOCK_SIZE, BLOCK_SIZE))
 
-    idx = 32
+    # First decode state
+    idx = 0
+    state_encoding_len, idx = decode_binary_string(encoding, idx, FRACTION_ENC_LENGTH)
+    encoded_state = encoding[idx: idx + state_encoding_len]
+    idx += state_encoding_len
+    state = StateMachine(encoded_state)
+
     # Create blocks
     for row in range(new_m):
         for col in range(new_n):
             # 1. Decode slice
-            decoded_slice, idx, prev_first_int = eq_vec_to_coeff_vec(vec, idx, k1, k2, k3, n, prev_first_int)
+            decoded_slice, idx, prev_first_int = eq_vec_to_coeff_vec(encoding, idx, k1, k2, k3, prev_first_int,
+                                                                     with_arithmetic)
             # 2. Inverse zig zag
             mat = inv_zigzag(np.array(decoded_slice))
             # 3. De-quantize
@@ -238,7 +255,7 @@ def vec_to_image(vec, k1, k2, k3, n, b):
     return unscale(a)
 
 
-def quantized_image_to_vec(blocked_img, k1, k2):
+def quantized_image_to_vec(blocked_img, k1, k2, k3, with_arithmetic=False):
     """
     Convert img to coefficient vector
     :param img:
@@ -253,31 +270,43 @@ def quantized_image_to_vec(blocked_img, k1, k2):
             print("Encoding block %d %d" % (row, col))
             quantized_block = blocked_img[row, col]
             coeff_vec = zigzag(quantized_block)
-            eq_vec, prev_first_coeff = coeff_vec_to_eq_vec(coeff_vec, k1, k2, prev_first_coeff)
+            eq_vec, prev_first_coeff = coeff_vec_to_eq_vec(coeff_vec, k1, k2, k3, prev_first_coeff, with_arithmetic)
             zigzags += [eq_vec]
-
 
     return ''.join(zigzags)
 
 if __name__ == '__main__':
     quantization_param = 50
+    order1, order2, order3 = 3, 2, 2
+
+    # Read image, and preprocess by DCT and quantization
     a = cv2.imread('Mona-Lisa.bmp', cv2.IMREAD_GRAYSCALE)
-    # a = cv2.imread('Mona-Lisa.bmp', cv2.IMREAD_GRAYSCALE)[:128, :128]
-    quantized_a = quantize_img(a, quantization_param)
+    orig_m, orig_n = a.shape
+    quantized_a, coefficients = quantize_img(a, quantization_param)
 
-    k1, k2 = 3, 2
-
-    # # Calculate length of encoding image with Exp-Golomb Encoding
-    # golomb_encoding_len_by_pixel = np.vectorize(exp_golomb_length)(a, GOLOMB_ENC_ORDER)
-    # total_golomb_encoding_len = np.sum(golomb_encoding_len_by_pixel)
+    # Encode image using only Exp-Golomb Encoding
+    golomb_code = quantized_image_to_vec(quantized_a, order1, order2, order3, with_arithmetic=False)
+    total_golomb_encoding_len = len(golomb_code)
 
     # Encode image with Arithmetic Coding
-    # state = StateMachine(a)
-    # code = compress_image(a, state)
+    state = StateMachine(coefficients)
+    encoded_state = state.encode_state()
+    arithmetic_code = quantized_image_to_vec(quantized_a, order1, order2, order3, with_arithmetic=True)
+    total_arithmetic_coding = format(len(encoded_state), FRACTION_ENC) + encoded_state + arithmetic_code
+    total_arithmetic_coding_len = len(total_arithmetic_coding)
 
-    vec = quantized_image_to_vec(quantized_a, k1, k2)
-    total_arithmetic_coding_len = len(vec)
-
-    # print("Encoded image using Order %d Exp-Golomb using %d bits" % (GOLOMB_ENC_ORDER, total_golomb_encoding_len))
+    print("Encoded image using Order %d Exp-Golomb using %d bits" % (order3, total_golomb_encoding_len))
     print("Encoded image using Arithmetic Coding using %d bits" % total_arithmetic_coding_len)
+
+    # Decode image with Arithmetic Coding and compare with original
+    decoded = code_to_image(arithmetic_code, order1, order2, order3, quantization_param)
+
+    plt.imshow(a, cmap='gray')
+    plt.title("Original Image")
+    plt.show()
+    plt.imshow(decoded, cmap='gray')
+    plt.title("Decompressed Image")
+    plt.show()
+
+    print((a == decoded).all())
 
