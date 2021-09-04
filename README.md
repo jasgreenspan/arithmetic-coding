@@ -21,7 +21,7 @@ In the encoding algorithm, the arithmetic and Exp-Golomb encodings are carried o
 ## Results
 We compared the results of the pure arithmetic encoding method and the hybrid encoding model to the pure Exp-Golomb method (order k=2) on 5 different images. The results shown in the graph below indicate that the pure arithmetic encoding method compresses each image moreso than the other methods. 
 
-![Lagrangian Optimization Results](Lambda vs BPP.png "Title")
+![Arithmetic Coding Results](results_graph.png "Title")
 
 Without the overhead incurred from the indicator bit in the hybrid method, this method would have been the best. Either way, both methods achieved the goal of improving upon the pure Exp-Golomb method. 
 
