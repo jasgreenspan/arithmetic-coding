@@ -189,56 +189,16 @@ def factors(n):
 ############################################################
 # Graph Utils
 ############################################################
-def make_rate_graph(ratio_points, compare_points, quality_factors, y_label, textstr, loc, graph_title,
-                    additional_line=0):
-    fig = plt.figure()
-    ax = fig.add_subplot(111)
+def make_bar_graph(labels, images, bpps):
+    x = np.arange(len(images))  # the label locations
+    width = 0.35  # the width of the bars
 
-    if additional_line != 0:
-        plt.axvline(x=additional_line, label='Zero Encoding Avg', c='m')
+    plt.bar(x - width / 3, bpps[0], width / 3, label=labels[0])
+    plt.bar(x, bpps[1], width / 3, label=labels[1])
+    plt.bar(x + width / 3, bpps[2], width / 3, label=labels[2])
 
-    plt.plot(ratio_points, compare_points, '-ro')
-    for i, txt in enumerate(quality_factors):
-        ax.annotate(txt, (ratio_points[i], compare_points[i]), verticalalignment='top',
-                    fontsize=10)
-
-    plt.xlabel('bpp (bits per pixel)')
-    plt.ylabel(y_label)
-
-    # these are matplotlib.patch.Patch properties
-    props = dict(boxstyle='round', facecolor='wheat', alpha=0.5)
-
-    # place a text box in left in axes coords
-    ax.text(0.05, loc, textstr, transform=ax.transAxes, fontsize=14,
-            verticalalignment='top', bbox=props)
-
+    plt.xticks(x, images)
+    plt.ylabel('bpp')
+    plt.title('Comparison of Exp-Golomb and Arithmetic Coding')
     plt.legend()
-    plt.title(graph_title)
-    plt.savefig(graph_title)
-    plt.show()
-
-
-def make_joint_rate_graph(ratios, compares, quality_factors, lines, y_label, graph_title, text_str):
-    fig = plt.figure()
-    ax = fig.add_subplot(111)
-    for ratio_points, compare_points, line in zip(ratios, compares, lines):
-        plt.plot(ratio_points, compare_points, '-o', label=line)
-
-    for i, txt in enumerate(quality_factors):
-        for ratio_points, compare_points in zip(ratios, compares):
-            ax.annotate(txt, (ratio_points[i], compare_points[i]), verticalalignment='top', fontsize=10)
-
-    plt.xlabel('bpp (bits per pixel)')
-    plt.ylabel(y_label)
-
-    # these are matplotlib.patch.Patch properties
-    props = dict(boxstyle='round', facecolor='wheat', alpha=0.5)
-
-    # place a text box in left in axes coords
-    ax.text(0.85, 0.5, text_str, transform=ax.transAxes, fontsize=14,
-            verticalalignment='top', bbox=props)
-
-    plt.title(graph_title)
-    plt.legend()
-    plt.savefig(graph_title)
     plt.show()
