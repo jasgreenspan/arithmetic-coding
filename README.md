@@ -28,6 +28,9 @@ Without the overhead incurred from the indicator bit in the hybrid method, this 
 ## How to use the code
 The code is divided into four files: <code>main.py</code>, <code>arithmetic_encoding.py</code>, <code>golomb_encoding.py</code>, and <code>utils.py</code>. To run the complete encoding scheme, as well as test the various methods, use the <code>if __name__ == '__main__':</code> in <code>main.py</code>: main from main.py. This will run on all the test images, as well as create the results graph. <code>arithmetic_encoding.py</code> contains the logic of the arithmetic coding, including the state model, and <code>golomb_encoding.py</code> contains the logic of the Exp-Golomb and Golomb-Rice encoding.
 
+## Contributors
+This implementaton was made by Jason Greenspan and Jake Korman as final project. Special thanks to Yuval Kochman for his guidance in the Image Compression course at Hebrew University.
+
 ## References:  
 General Background:
 - https://en.wikipedia.org/wiki/Arithmetic_coding
